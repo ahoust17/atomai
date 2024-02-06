@@ -439,7 +439,8 @@ class BaseTrainer:
         self.augment_fn = augment_fn
 
     def compile_trainer(self,
-                        train_data: Union[Tuple[torch.Tensor], Tuple[np.ndarray]] = None,
+                        train_data: Optional[Union[Tuple[torch.Tensor], Tuple[np.ndarray]]] = None,
+                        loaders: Optional[Tuple[torch.utils.data.DataLoader]] = None,
                         loss: Union[str, Callable] = 'ce',
                         optimizer: Optional[Type[torch.optim.Optimizer]] = None,
                         training_cycles: int = 1000,
@@ -516,11 +517,17 @@ class BaseTrainer:
 
         if self.data_is_set:
             if kwargs.get("overwrite_train_data", True):
-                self.set_data(*train_data, memory_alloc=alloc)
+                if loaders is not None:
+                    self.train_loader, self.test_loader = loaders
+                else:
+                    self.set_data(*train_data, memory_alloc=alloc)
             else:
                 pass
         else:
-            self.set_data(*train_data, memory_alloc=alloc)
+            if loaders is not None:
+                self.train_loader, self.test_loader = loaders
+            else:
+                self.set_data(*train_data, memory_alloc=alloc)
 
         self.perturb_weights = perturb_weights
         if self.perturb_weights:
@@ -671,10 +678,12 @@ class SegTrainer(BaseTrainer):
         #self.meta_state_dict["optimizer"] = self.optimizer
 
     def set_data(self,
-                 X_train: Tuple[np.ndarray, torch.Tensor],
-                 y_train: Tuple[np.ndarray, torch.Tensor],
+                 X_train: Optional[Tuple[np.ndarray, torch.Tensor]],
+                 y_train: Optional[Tuple[np.ndarray, torch.Tensor]],
                  X_test: Optional[Tuple[np.ndarray, torch.Tensor]] = None,
                  y_test: Optional[Tuple[np.ndarray, torch.Tensor]] = None,
+                 train_loader: Optional[torch.utils.data.DataLoader] = None,
+                 test_loader: Optional[torch.utils.data.DataLoader] = None,
                  **kwargs: Union[float, int]) -> None:
         """
         Sets training and test data.
@@ -699,29 +708,37 @@ class SegTrainer(BaseTrainer):
                 4D (binary) / 3D (multiclass) numpy array or pytorch tensor
                 of training masks (aka ground truth) stacked along
                 the first dimension.
+            train_loader:
+                PyTorch DataLoader for training data
+            test_loader:
+                PyTorch DataLoader for test data
             kwargs:
                 Parameters for train_test_split ('test_size' and 'seed') when
                 separate test set is not provided and 'memory_alloc', which
                 sets a threshold (in GBs) for holding entire training data on GPU
         """
+        if train_loader and test_loader:
+            self.train_loader = train_loader
+            self.test_loader = test_loader
 
-        if X_test is None or y_test is None:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_train, y_train, test_size=kwargs.get("test_size", .15),
-                shuffle=True, random_state=kwargs.get("seed", 1))
-
-        if self.full_epoch:
-            loaders = init_fcnn_dataloaders(
-                X_train, y_train, X_test, y_test,
-                self.batch_size, memory_alloc=kwargs.get("memory_alloc", 4))
-            self.train_loader, self.test_loader, nb_classes = loaders
         else:
-            (self.X_train, self.y_train,
-             self.X_test, self.y_test,
-             nb_classes) = preprocess_training_image_data(
-                                    X_train, y_train, X_test, y_test,
-                                    self.batch_size,
-                                    kwargs.get("memory_alloc", 4))
+            if X_test is None or y_test is None:
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X_train, y_train, test_size=kwargs.get("test_size", .15),
+                    shuffle=True, random_state=kwargs.get("seed", 1))
+
+            if self.full_epoch:
+                loaders = init_fcnn_dataloaders(
+                    X_train, y_train, X_test, y_test,
+                    self.batch_size, memory_alloc=kwargs.get("memory_alloc", 4))
+                self.train_loader, self.test_loader, nb_classes = loaders
+            else:
+                (self.X_train, self.y_train,
+                self.X_test, self.y_test,
+                nb_classes) = preprocess_training_image_data(
+                                        X_train, y_train, X_test, y_test,
+                                        self.batch_size,
+                                        kwargs.get("memory_alloc", 4))
 
         if self.nb_classes != nb_classes:
             raise AssertionError("Number of classes in initialized model" +

@@ -59,10 +59,12 @@ class Segmentor(SegTrainer):
         self.downsample_factor = None
 
     def fit(self,
-            X_train: Union[np.ndarray, torch.Tensor],
-            y_train: Union[np.ndarray, torch.Tensor],
+            X_train: Optional[Union[np.ndarray, torch.Tensor]] = None,
+            y_train: Optional[Union[np.ndarray, torch.Tensor]] = None,
             X_test: Optional[Union[np.ndarray, torch.Tensor]] = None,
             y_test: Optional[Union[np.ndarray, torch.Tensor]] = None,
+            train_loader: Optional[torch.utils.data.DataLoader] = None,
+            test_loader: Optional[torch.utils.data.DataLoader] = None,
             loss: str = 'ce',
             optimizer: Optional[Type[torch.optim.Optimizer]] = None,
             training_cycles: int = 1000,
@@ -139,11 +141,18 @@ class Segmentor(SegTrainer):
                 to perform the augmentation "on-the-fly" (e.g. rotation=True,
                 gauss_noise=[20, 60], etc.)
         """
-        self.compile_trainer(
-            (X_train, y_train, X_test, y_test),
-            loss, optimizer, training_cycles, batch_size,
-            compute_accuracy, full_epoch, swa, perturb_weights,
-            **kwargs)
+        if train_loader is None:
+            self.compile_trainer(
+                (X_train, y_train, X_test, y_test),
+                loss, optimizer, training_cycles, batch_size,
+                compute_accuracy, full_epoch, swa, perturb_weights,
+                **kwargs)
+        else:
+            self.compile_trainer(
+                (train_loader, test_loader),
+                loss, optimizer, training_cycles, batch_size,
+                compute_accuracy, full_epoch, swa, perturb_weights,
+                **kwargs)
 
         self.augment_fn = seg_augmentor(self.nb_classes, **kwargs)
         _ = self.run()
