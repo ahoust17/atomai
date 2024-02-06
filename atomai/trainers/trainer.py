@@ -439,8 +439,9 @@ class BaseTrainer:
         self.augment_fn = augment_fn
 
     def compile_trainer(self,
-                        train_data: Optional[Union[Tuple[torch.Tensor], Tuple[np.ndarray]]] = None,
-                        loaders: Optional[Tuple[torch.utils.data.DataLoader]] = None,
+                        train_data: Optional[Union[Tuple[torch.Tensor],
+                                                    Tuple[np.ndarray],
+                                                    Tuple[torch.utils.data.DataLoader]]] = None,
                         loss: Union[str, Callable] = 'ce',
                         optimizer: Optional[Type[torch.optim.Optimizer]] = None,
                         training_cycles: int = 1000,
@@ -517,17 +518,12 @@ class BaseTrainer:
 
         if self.data_is_set:
             if kwargs.get("overwrite_train_data", True):
-                if loaders is not None:
-                    self.train_loader, self.test_loader = loaders
-                else:
-                    self.set_data(*train_data, memory_alloc=alloc)
+                self.set_data(*train_data, memory_alloc=alloc)
             else:
                 pass
         else:
-            if loaders is not None:
-                self.train_loader, self.test_loader = loaders
-            else:
-                self.set_data(*train_data, memory_alloc=alloc)
+
+            self.set_data(*train_data, memory_alloc=alloc)
 
         self.perturb_weights = perturb_weights
         if self.perturb_weights:
@@ -678,12 +674,9 @@ class SegTrainer(BaseTrainer):
         #self.meta_state_dict["optimizer"] = self.optimizer
 
     def set_data(self,
-                 X_train: Optional[Tuple[np.ndarray, torch.Tensor]],
-                 y_train: Optional[Tuple[np.ndarray, torch.Tensor]],
-                 X_test: Optional[Tuple[np.ndarray, torch.Tensor]] = None,
-                 y_test: Optional[Tuple[np.ndarray, torch.Tensor]] = None,
-                 train_loader: Optional[torch.utils.data.DataLoader] = None,
-                 test_loader: Optional[torch.utils.data.DataLoader] = None,
+                 train_data: [Union[Tuple[torch.Tensor],
+                                    Tuple[np.ndarray],
+                                    Tuple[torch.utils.data.DataLoader]]],
                  **kwargs: Union[float, int]) -> None:
         """
         Sets training and test data.
@@ -717,11 +710,11 @@ class SegTrainer(BaseTrainer):
                 separate test set is not provided and 'memory_alloc', which
                 sets a threshold (in GBs) for holding entire training data on GPU
         """
-        if train_loader and test_loader:
-            self.train_loader = train_loader
-            self.test_loader = test_loader
 
-        else:
+        if all(isinstance(element, torch.utils.data.DataLoader) for element in train_data):
+            (self.train_loader, self.test_loader) = train_data
+
+        elif not all(isinstance(element, torch.utils.data.DataLoader) for element in train_data):
             if X_test is None or y_test is None:
                 X_train, X_test, y_train, y_test = train_test_split(
                     X_train, y_train, test_size=kwargs.get("test_size", .15),
@@ -739,6 +732,8 @@ class SegTrainer(BaseTrainer):
                                         X_train, y_train, X_test, y_test,
                                         self.batch_size,
                                         kwargs.get("memory_alloc", 4))
+        else:
+            raise TypeError("All training and testing data must be the same type")
 
         if self.nb_classes != nb_classes:
             raise AssertionError("Number of classes in initialized model" +
