@@ -26,7 +26,6 @@ class viBaseTrainer:
             self.device = "cuda"
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             self.device = "mps"
-            print('mps is available')
         else:
             self.device = "cpu"
             print('using cpu')

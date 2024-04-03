@@ -191,14 +191,20 @@ class BaseVAE(viBaseTrainer):
         Returns:
             Generated ("decoded") image(s)
         """
+        if torch.cuda.is_available():
+            self.device = 'cuda'
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = 'mps'
+        else:
+            self.device = 'cpu'
 
         if isinstance(z_sample, np.ndarray):
             z_sample = torch.from_numpy(z_sample).float()
         if len(z_sample.size()) == 1:
             z_sample = z_sample[None, ...]
+        z_sample = z_sample.to(self.device)
         if self.coord:
             x_coord = self.x_coord.expand(z_sample.size(0), *self.x_coord.size())
-        z_sample = z_sample.cuda() if torch.cuda.is_available() else z_sample
         if y is not None:
             if isinstance(y, int):
                 y = torch.tensor(y)
@@ -206,11 +212,10 @@ class BaseVAE(viBaseTrainer):
                 y = torch.from_numpy(y)
             if y.dim() == 0:
                 y = y.unsqueeze(0)
-            y = y.cuda() if torch.cuda.is_available() else y
+            y = y.to(self.device) # set device
             targets = to_onehot(y, self.nb_classes)
             z_sample = torch.cat((z_sample, targets), dim=-1)
-        if torch.cuda.is_available():
-            self.decoder_net.cuda()
+        self.decoder_net.to(self.device) # set device
         self.decoder_net.eval()
         with torch.no_grad():
             if self.coord:
