@@ -22,7 +22,14 @@ class viBaseTrainer:
     """
     def __init__(self):
         set_train_rng(1)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = "mps"
+            print('mps is available')
+        else:
+            self.device = "cpu"
+            print('using cpu')
         self.in_dim = None
         self.out_dim = None
         self.z_dim = 1

@@ -76,6 +76,8 @@ class BaseVAE(viBaseTrainer):
 
         if torch.cuda.is_available:
             torch.cuda.empty_cache()
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            torch.backends.mps.reset()
         set_train_rng(seed)
         np.random.seed(seed)
 
